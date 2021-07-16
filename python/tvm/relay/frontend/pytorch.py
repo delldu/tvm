@@ -44,6 +44,7 @@ from .common import infer_value as _infer_value
 from .common import infer_value_simulated as _infer_value_simulated
 from .common import try_infer_value
 from .pytorch_utils import is_version_greater_than
+import pdb
 
 __all__ = ["from_pytorch"]
 
@@ -751,6 +752,7 @@ class PyTorchOpConverter:
             assert len(inputs) == 3, "Input quant param not found in op inputs"
             input_zero_point = _expr.const(inputs[2], dtype="int32")
             return qnn_torch.quantized_relu(data, input_zero_point)
+        # for in-place this will error !!!
         return _op.nn.relu(data)
 
     def prelu(self, inputs, input_types):
@@ -1273,7 +1275,8 @@ class PyTorchOpConverter:
 
         if axis is not None:
             return _expr.const(shape[axis])
-        return _expr.const(shape)
+
+        return [_expr.const(s) for s in shape]
 
     def numtotensor(self, inputs, input_types):
         val = inputs[0]
@@ -1875,7 +1878,9 @@ class PyTorchOpConverter:
 
     def Float(self, inputs, input_types):
         assert len(inputs) == 1
-        return _op.cast(inputs[0], "float32")
+        if isinstance(inputs[0], _expr.Expr):
+            return inputs[0]
+        return float(inputs[0])
 
     def bitwise_not(self, inputs, input_types):
         data = inputs[0]
@@ -2347,6 +2352,46 @@ class PyTorchOpConverter:
 
         return _op.nn.im2col(data, kernel_size, dilation, padding, stride)
 
+    def dim(self, inputs, input_types):
+        shape = self.infer_shape_with_prelude(inputs[0])
+        return len(shape)
+
+    def unchecked_cast(self, inputs, input_types):
+        return inputs[0]
+        # return _expr.const(inputs[0])
+
+    def warn(self, inputs, input_types):
+        print("aten::warn: ", inputs, input_types)
+        return None
+
+    def aten_is(self, inputs, input_types):
+        return _expr.const(inputs[0] is inputs[1])
+
+    def aten_isnot(self, inputs, input_types):
+        return _expr.const(inputs[0] is not inputs[1])
+
+    def conv2d(self, inputs, input_types):
+        # simple version instead of self.convolution
+        data = inputs[0]
+        weight = inputs[1]
+        bias = inputs[2]
+        strides = tuple(inputs[3])
+        padding = tuple(inputs[4])
+        dilation = tuple(inputs[5])
+        groups = inputs[6]
+
+        conv_out = _op.nn.conv2d(
+            data,
+            weight,
+            strides,
+            padding,
+            dilation,
+            groups,
+        )
+
+        return _op.nn.bias_add(conv_out, bias)
+
+
     # Operator mappings
     def create_convert_map(self):
         self.convert_map = {
@@ -2565,6 +2610,12 @@ class PyTorchOpConverter:
             "aten::flip": self.flip,
             "aten::grid_sampler": self.grid_sampler,
             "aten::im2col": self.im2col,
+            "aten::dim": self.dim,
+            "aten::__isnot__": self.aten_isnot,
+            "aten::__is__": self.aten_is,
+            "aten::conv2d": self.conv2d,
+            "prim::unchecked_cast": self.unchecked_cast,
+            "aten::warn": self.warn,
         }
 
     def update_convert_map(self, custom_map):

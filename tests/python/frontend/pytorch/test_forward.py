@@ -636,6 +636,15 @@ def test_forward_relu():
     input_data = torch.rand(input_shape).float()
     verify_model(torch.nn.ReLU().eval(), input_data=input_data)
 
+    class TestReLU(Module):
+        def forward(self, x):
+            return torch.relu(x)
+
+    verify_script_model(TestReLU().eval(), [(10, 20, 8, 16)], _get_default_vm_targets())
+    verify_script_model(torch.nn.ReLU().eval(), [(10, 20, 8, 16)], _get_default_vm_targets())
+    verify_script_model(torch.nn.ReLU(True).eval(), [(10, 20, 8, 16)], _get_default_vm_targets())
+    verify_script_model(torch.nn.ReLU(False).eval(), [(10, 20, 8, 16)], _get_default_vm_targets())
+
 
 @tvm.testing.uses_gpu
 def test_forward_prelu():
@@ -1262,8 +1271,16 @@ def test_forward_size():
         def forward(self, *args):
             return float(args[0].size(0)) * args[0]
 
+    class Size2(Module):
+        def forward(self, x):
+            B, C, H, W = x.size()
+            return x.view(B, C, H * W)
+
     input_data = torch.rand(input_shape).float()
     verify_model(Size1().float().eval(), input_data=input_data)
+
+    verify_model(Size2().float().eval(), input_data=torch.randn(2, 3, 32, 32))
+    verify_script_model(Size2().eval(), [(10, 20, 8, 16)], _get_default_vm_targets())
 
 
 @tvm.testing.uses_gpu
@@ -3931,6 +3948,26 @@ def test_forward_im2col():
     verify_model(Im2col(3, 1, 2, 1), input_data=input)
     verify_model(Im2col(5, 1, 2, 2), input_data=input)
 
+    class Im2col3x3(Module):
+        def __init__(self):
+            super(Im2col3x3, self).__init__()
+
+        def forward(self, x):
+            return torch._C._nn.im2col(x, (3, 3), (1, 1), (1, 1), (1, 1))
+
+    class Im2col5x5(Module):
+        def __init__(self):
+            super(Im2col5x5, self).__init__()
+
+        def forward(self, x):
+            return torch._C._nn.im2col(x, (5, 5), (1, 1), (1, 1), (2, 2))
+
+    model = Im2col3x3()
+    input = torch.randn(2, 3, 32, 32)
+    verify_model(model, input_data=input)
+
+    verify_script_model(Im2col5x5().eval(), [(2, 3, 32, 32)], _get_default_vm_targets())
+
 
 @tvm.testing.uses_gpu
 def test_forward_grid_sampler():
@@ -3961,7 +3998,26 @@ def test_forward_grid_sampler():
 
     model = GridSampler(16, 32)
     input = torch.randn(2, 3, 32, 32)
+
     verify_model(model, input_data=input)
+    verify_script_model(model.eval(), [(2, 3, 32, 32)], _get_default_vm_targets())
+
+
+@tvm.testing.uses_gpu
+def test_forward_float():
+    torch.set_grad_enabled(False)
+
+    def convert_i(i: int) -> float:
+        return float(i)
+
+    class FloatModel(Module):
+        def forward(self, x):
+            f = convert_i(10)
+            return f * x
+
+    model = FloatModel()
+
+    verify_script_model(model.eval(), [(2, 3, 32, 32)], _get_default_vm_targets())
 
 
 if __name__ == "__main__":
