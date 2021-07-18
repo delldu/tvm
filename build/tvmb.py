@@ -61,11 +61,14 @@ if __name__ == "__main__":
             def __init__(self):
                 """Init model."""
                 super(MicroModel, self).__init__()
-                self.conv = nn.Conv2d(3, 8, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+                self.conv1x1 = nn.Conv2d(3, 3, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+                self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
                 self.relu = nn.ReLU()
 
             def forward(self, x):
-                x = self.conv(x)
+                x = self.conv1x1(x)
+                x = self.relu(x)
+                x = self.conv3x3(x)
                 x = self.relu(x)
                 return x
 
