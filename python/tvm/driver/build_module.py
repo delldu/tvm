@@ -40,6 +40,7 @@ from tvm.tir.expr import Var
 
 from . import _ffi_api as ffi
 
+import pdb
 
 def get_binds(args, compact=False, binds=None):
     """Internal function to get binds and arg_list given arguments.
@@ -128,6 +129,9 @@ def lower(
     if isinstance(inp, PrimFunc):
         return ffi.lower_primfunc(inp, name, simple_mode)
     if isinstance(inp, schedule.Schedule):
+        # ===> xxxx8888, xxxx3333
+        pdb.set_trace()
+
         return ffi.lower_schedule(inp, args, name, binds, simple_mode)
     raise ValueError("Expected input to be an IRModule, PrimFunc or Schedule, but got, ", type(inp))
 

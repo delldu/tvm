@@ -36,8 +36,15 @@ def _fallback_schedule(cfg, wkl):
     dilated_kernel_h = (wkl.kernel_h - 1) * wkl.dilation_h + 1
     dilated_kernel_w = (wkl.kernel_w - 1) * wkl.dilation_w + 1
 
-    out_height = (wkl.height + pt + pb - dilated_kernel_h) // HSTR + 1
-    out_width = (wkl.width + pl + pr - dilated_kernel_w) // WSTR + 1
+    if isinstance(wkl.height, tvm.tir.Any):
+        out_height = (2048 + pt + pb - dilated_kernel_h) // HSTR + 1
+    else:
+        out_height = (wkl.height + pt + pb - dilated_kernel_h) // HSTR + 1
+
+    if isinstance(wkl.width, tvm.tir.Any):
+        out_width = (4096 + pl + pr - dilated_kernel_w) // WSTR + 1
+    else:
+        out_width = (wkl.width + pl + pr - dilated_kernel_w) // WSTR + 1
 
     oc_bn = 1
     for bn in range(simd_width, 0, -1):

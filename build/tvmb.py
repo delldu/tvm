@@ -51,10 +51,9 @@ if __name__ == "__main__":
         so_path = "{}/cpu_{}.so".format(args.output, os.path.basename(args.input))
         ro_path = "{}/cpu_{}.ro".format(args.output, os.path.basename(args.input))
 
-    input_shape = (1, 3, 512, 512)
-    # input_shape = (1, 3, relay.Any(), relay.Any())
+    input_shape = (1, 3, 128, 128)
 
-    def micro_onnx():
+    def create_micro():
         import torch
         import torch.nn as nn
 
@@ -110,6 +109,11 @@ if __name__ == "__main__":
         # )
         mod, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
         print(mod)
+        # def @main(%input: Tensor[(1, 3, ?, ?), float32]) {
+        #   %0 = nn.conv2d(%input, meta[relay.Constant][0], padding=[1, 1, 1, 1], kernel_size=[3, 3]);
+        #   %1 = nn.bias_add(%0, meta[relay.Constant][1]);
+        #   nn.relu(%1)
+        # }
 
         with tvm.transform.PassContext(opt_level=3):
             vm_exec = relay.vm.compile(mod, target=target, params=params)
@@ -119,6 +123,55 @@ if __name__ == "__main__":
         with open(ro_path, "wb") as fo:
             fo.write(code)
 
+        # (Pdb) print(vm_exec.bytecode)
+        # VM Function[0]: main(input)
+        # # reg file size = 15
+        # # instruction count = 18
+        # opcode, fields # inst(text):
+        #  0: 11 0 1   # load_const $1 Const[0]
+        #  1: 16 1 64 2 32 1 1 2   # alloc_storage $2 $1 64 float32 1
+        # ==> alloc_storage(size, alignment, device, dtype_hint="float32"):
+
+        #  2: 11 1 3   # load_const $3 Const[1]
+        #  3: 5 2 3 2 32 1 5 4 1 1 512 512 3   # alloc_tensor $4 $2 $3 [1, 1, 512, 512, 3] float32
+        # ==> alloc_tensor(storage, offset, shape=[1, 1, 512, 512, 3], dtype="float32", assert_shape=None)
+
+        #  4: 4 0 2 1 0 4   # invoke_packed PackedFunc[0] (in: $0, out: $4)
+        # ==> fused_layout_transform_2
+
+        #  5: 11 2 5   # load_const $5 Const[2]
+        #  6: 16 5 64 2 32 1 1 6   # alloc_storage $6 $5 64 float32 1
+        # ==> alloc_storage(size, alignment, device, dtype_hint="float32"):
+
+        #  7: 11 3 7   # load_const $7 Const[3]
+        #  8: 5 6 7 2 32 1 5 8 1 1 512 512 8   # alloc_tensor $8 $6 $7 [1, 1, 512, 512, 8] float32
+        # ==> alloc_tensor(storage, offset, shape=[1, 1, 512, 512, 8], dtype="float32", assert_shape=None)
+
+        #  9: 11 4 9   # load_const $9 Const[4]
+        # 10: 11 5 10   # load_const $10 Const[5]
+        # 11: 4 1 4 1 4 9 10 8   # invoke_packed PackedFunc[1] (in: $4, $9, $10, out: $8)
+        # 12: 11 6 11   # load_const $11 Const[6]
+        # 13: 16 11 64 2 32 1 1 12   # alloc_storage $12 $11 64 float32 1
+        # 14: 11 7 13   # load_const $13 Const[7]
+
+        # 15: 5 12 13 2 32 1 4 14 1 8 512 512   # alloc_tensor $14 $12 $13 [1, 8, 512, 512] float32
+        # ==> alloc_tensor(storage, offset, shape=[1, 8, 512, 512], dtype="float32", assert_shape=None)
+
+        # 16: 4 2 2 1 8 14   # invoke_packed PackedFunc[2] (in: $8, out: $14)
+        # ==> fused_layout_transform_3
+
+        # 17: 1 14   # ret $14
+
+        # (Pdb) print(vm_exec.stats)
+        # Relay VM executable statistics:
+        #   Constant shapes (# 8): [scalar, scalar, scalar, scalar, [1, 1, 3, 3, 3, 8], 
+        # [1, 1, 1, 1, 8], 
+        # scalar, scalar]
+        #   Globals (#1): [("main", 0)]
+        #   Primitive ops (#3): [fused_layout_transform_2, fused_nn_contrib_conv2d_NCHWc_add_nn_relu, 
+        #  fused_layout_transform_3]
+
+
         print("Building model OK")
 
     def verify():
@@ -126,7 +179,6 @@ if __name__ == "__main__":
 
         print("Running model on {} ...".format(device))
 
-        input_shape = [1, 3, 512, 512]
         np_data = np.random.uniform(size=input_shape).astype("float32")
         nd_data = tvm.nd.array(np_data, device)
 
@@ -148,7 +200,7 @@ if __name__ == "__main__":
         )
 
     if not os.path.exists("micro.onnx"):
-        micro_onnx()
+        create_micro()
 
     if not os.path.exists(args.input):
         print("ONNX model file {} not exist.".format(args.input))

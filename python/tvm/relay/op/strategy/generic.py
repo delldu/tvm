@@ -1502,6 +1502,7 @@ def wrap_compute_argwhere(topi_compute):
             if hasattr(s, "value"):
                 output_shape.append(s)
             else:
+                pdb.set_trace()
                 output_shape.append(te.var("any_dim", "int32"))
         new_output_type = ir.TensorType(output_shape, "int32")
         return [topi_compute(new_output_type, inputs[0])]

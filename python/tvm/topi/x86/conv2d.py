@@ -30,7 +30,7 @@ from ..nn.depthwise_conv2d import _get_workload as _get_depthwise_conv2d_workloa
 from ..nn.utils import get_pad_tuple
 from ..utils import get_const_tuple, traverse_inline
 from . import conv2d_avx_1x1, conv2d_avx_common
-
+import pdb
 logger = logging.getLogger("topi")
 
 
@@ -173,6 +173,7 @@ def conv2d_NCHWc(cfg, data, kernel, strides, padding, dilation, layout, out_layo
     """Compute conv2d with NCHWc layout."""
     # layout and out_layout are not used here,
     # we keep them for debug convenience when dumping autotvm workload
+
     if len(data.shape) == 5:
         n, ic_chunk, ih, iw, ic_bn = get_const_tuple(data.shape)
         oc_chunk, ic_chunk_group, kernel_height, kernel_width, _, oc_bn = get_const_tuple(
@@ -183,6 +184,9 @@ def conv2d_NCHWc(cfg, data, kernel, strides, padding, dilation, layout, out_layo
     else:
         n, in_channel, ih, iw = get_const_tuple(data.shape)
         num_filter, _, kernel_height, kernel_width = get_const_tuple(kernel.shape)
+
+    # data is dynamic shaoe ?
+    # type(ih) -- <class 'tvm.tir.expr.Var'>, ih -- height
 
     # Define autotvm tuning space
     is_kernel_1x1 = kernel_height == 1 and kernel_width == 1
@@ -197,7 +201,9 @@ def conv2d_NCHWc(cfg, data, kernel, strides, padding, dilation, layout, out_layo
         "tile_ow", ow, num_outputs=2, filter=lambda y: y.size[-1] <= 64, policy="verbose"
     )
     if is_kernel_1x1:
-        cfg.define_knob("tile_oh", [1, 2] if oh > 1 else [1])
+        # cfg.define_knob("tile_oh", [1, 2] if oh > 1 else [1])
+        # xxxx8888, i think oh > 1 is absolute !!!
+        cfg.define_knob("tile_oh", [1, 2])
     else:
         cfg.define_knob("unroll_kw", [True, False])
 

@@ -26,7 +26,7 @@ from .. import nn
 from ..utils import get_const_int, get_const_tuple, traverse_inline
 from ..nn.winograd_util import winograd_transform_matrices
 from ..nn.conv2d import conv2d_winograd_nhwc, _conv2d_winograd_nhwc_impl
-
+import pdb
 
 logger = logging.getLogger("conv2d_winograd")
 
@@ -37,7 +37,7 @@ def _infer_tile_size(data, kernel, layout="NCHW"):
     else:
         assert layout == "NHWC"
         N, H, W, CI = get_const_tuple(data.shape)
-
+    # xxxx8888, xxxx3333 most time H % 8 != 0, right ?
     if H % 8 == 0:
         return 4
     return 2
@@ -51,12 +51,16 @@ def winograd_cuda(cfg, data, kernel, strides, padding, dilation, out_dtype, pre_
 
     if isinstance(N, tvm.tir.Any):
         N = tvm.te.size_var("n")
-
-    if not isinstance(H, int) or not isinstance(W, int):
-        raise RuntimeError(
-            "cuda winograd conv2d doesn't support dynamic input\
-                           height or width."
-        )
+    # xxxx8888
+    # if not isinstance(H, int) or not isinstance(W, int):
+    #     raise RuntimeError(
+    #         "cuda winograd conv2d doesn't support dynamic input\
+    #                        height or width."
+    #     )
+    if isinstance(H, tvm.tir.Any):
+        H = 2048
+    if isinstance(W, tvm.tir.Any):
+        W = 4096
 
     if isinstance(dilation, int):
         dilation_h = dilation_w = dilation

@@ -341,6 +341,10 @@ TVM_REGISTER_GLOBAL("driver.lower_primfunc")
 
 IRModule LowerSchedule(te::Schedule sch, const Array<te::Tensor>& args, const std::string& name,
                        const std::unordered_map<te::Tensor, tir::Buffer>& binds, bool simple_mode) {
+
+  // LOG(INFO) << "1) LowerSchedule xxxx8888";
+
+
   Array<ObjectRef> ref_args;
   for (ObjectRef x : args) {
     ref_args.push_back(x);
@@ -350,6 +354,8 @@ IRModule LowerSchedule(te::Schedule sch, const Array<te::Tensor>& args, const st
 
 IRModule LowerSchedule(te::Schedule sch, const Array<ObjectRef>& args, const std::string& name,
                        const std::unordered_map<te::Tensor, tir::Buffer>& binds, bool simple_mode) {
+  LOG(INFO) << "2) LowerSchedule xxxx8888" << ", name:" << name << ", args:" << args;
+
   IRModule mod = ScheduleToModule(std::move(sch), args, name, binds);
   // Get the legacy TE pass list
   Array<transform::Pass> pass_list = CreatePassList(simple_mode, true);
@@ -451,6 +457,7 @@ std::pair<IRModule, IRModule> SplitDevHostFuncs(IRModule mod_mixed, const Target
 //
 // Build for heterogeneous execution.
 runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& target_host_arg) {
+  LOG(INFO) << "4) build xxxx8888";
   auto pass_ctx = transform::PassContext::Current();
 
   std::vector<runtime::Module> device_modules;
@@ -495,6 +502,8 @@ runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& tar
       if (mdevice->functions.size() != 0) {
         device_modules.push_back(codegen::Build(mdevice, it.first));
       }
+    } else {
+      LOG(INFO) << "build xxxx8888 lost" << it.first;
     }
   }
 
@@ -510,6 +519,8 @@ runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& tar
 
 // Build for heterogeneous execution when target is a string.
 runtime::Module build(const Map<String, IRModule>& inputs_arg, const Target& target_host_arg) {
+  LOG(INFO) << "build xxxx8888";
+
   Map<Target, IRModule> updated_inputs;
   Target target_host = target_host_arg;
   for (const auto& it : inputs_arg) {
@@ -527,9 +538,14 @@ runtime::Module build(const Map<String, IRModule>& inputs_arg, const Target& tar
 // Build for homogeneous execution.
 runtime::Module build(const IRModule& funcs, const Target& target_arg,
                       const Target& target_host_arg) {
+  // LOG(INFO) << "3) build xxxx8888";
+
   auto target = target_arg, target_host = target_host_arg;
   CheckAndUpdateHostConsistency(&target, &target_host);
   Map<Target, IRModule> inputs = {{target, funcs}};
+
+  LOG(INFO) << "runtime::Module build--> xxxx8888 target:" << target << ", target_host" << target_host;
+
   return build(inputs, target_host);
 }
 

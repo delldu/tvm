@@ -22,6 +22,7 @@ import warnings
 
 import numpy as np
 import tvm
+from tvm import te
 from tvm.ir import IRModule
 from tvm.topi.utils import get_const_tuple
 
@@ -47,7 +48,7 @@ from .common import (
     infer_value,
     new_var,
 )
-
+import pdb
 __all__ = ["from_onnx"]
 
 
@@ -127,8 +128,10 @@ def get_info(info_proto):
     for dim in info_proto.type.tensor_type.shape.dim:
         name = dim.dim_param
         value = dim.dim_value
+        # dim.dim_param -- 'height', value -- 0
         if value is None or value == 0:
-            value = _ty.Any()
+            value = te.var(name, "int32")
+            # value = _ty.Any()
             shape_name.append(name)
         else:
             shape_name.append(value)

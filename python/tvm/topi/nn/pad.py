@@ -20,7 +20,7 @@ import tvm
 from tvm import te
 from ..utils import equal_const_int
 from .. import tag
-
+import pdb
 
 @tvm.te.tag_scope(tag=tag.INJECTIVE + ",pad")
 def pad(data, pad_before, pad_after=None, pad_value=0.0, name="PadInput"):
@@ -79,6 +79,7 @@ def pad(data, pad_before, pad_after=None, pad_value=0.0, name="PadInput"):
             else:
                 index_tuple.append(indices[i] - pad_before[i])
                 not_zero.append(indices[i] >= pad_before[i])
+                # xxxx8888
                 not_zero.append(indices[i] < data.shape[i] + pad_before[i])
         if not_zero:
             not_zero = tvm.tir.all(*not_zero)

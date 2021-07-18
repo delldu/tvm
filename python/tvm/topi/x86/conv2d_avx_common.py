@@ -24,14 +24,30 @@ from ..utils import get_const_tuple
 from .tensor_intrin import dot_16x1x16_uint8_int8_int32
 from .utils import get_fp32_len
 
+import pdb
 
 def _fallback_schedule(cfg, wkl):
+    # cfg = [('tile_ic', [-1, 1]), ('tile_oc', [-1, 1]), ('tile_ow', [-1, 64]), ('unroll_kw', True)],None
+    # wkl = Workload(in_dtype='float32', 
+    #     out_dtype='float32', height=1, width=1, in_filter=3, groups=1, 
+    #     out_filter=8, kernel_h=3, kernel_w=3, padt=1, padl=1, padb=1, padr=1, 
+    #     dilation_h=1, dilation_w=1, stride_h=1, stride_w=1)
     simd_width = get_fp32_len()
     pt, pl, pb, pr = wkl.padt, wkl.padl, wkl.padb, wkl.padr
     HSTR, WSTR = wkl.stride_h, wkl.stride_w
-    dilated_kernel_w = (wkl.kernel_w - 1) * wkl.dilation_w + 1
 
-    out_width = (wkl.width + pl + pr - dilated_kernel_w) // WSTR + 1
+    dilated_kernel_w = (wkl.kernel_w - 1) * wkl.dilation_w + 1
+    # xxxx8888
+    # Workload(in_dtype='float32', out_dtype='float32', 
+    #     height=1, width=1, in_filter=3, groups=1, 
+    #     out_filter=8, kernel_h=3, kernel_w=3, padt=1, padl=1, padb=1, padr=1, 
+    #     dilation_h=1, dilation_w=1, stride_h=1, stride_w=1)
+
+    # xxxx33333
+    if isinstance(wkl.width, tvm.tir.Any):
+        out_width = (4096 + pl + pr - dilated_kernel_w) // WSTR + 1
+    else:
+        out_width = (wkl.width + pl + pr - dilated_kernel_w) // WSTR + 1
 
     oc_bn = 1
     for bn in range(simd_width, 0, -1):

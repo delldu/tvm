@@ -24,7 +24,7 @@ from tvm.runtime import Object
 from tvm.target import GenericFunc, get_native_generic_func
 
 from . import _make
-
+import pdb
 
 def get(op_name):
     """Get the Op for a given name
@@ -486,6 +486,8 @@ def register_mixed_precision_conversion(op_name, func=None, level=10):
 
 @tvm._ffi.register_func("relay.op.compiler._lower")
 def _lower(name, schedule, inputs, outputs):
+    pdb.set_trace()
+
     return lower(schedule, list(inputs) + list(outputs), name=name)
 
 

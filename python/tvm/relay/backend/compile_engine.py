@@ -30,6 +30,7 @@ from ..backend.utils import mangle_module_name
 from .. import function as _function
 from .. import ty as _ty
 from . import _backend
+import pdb
 
 logger = logging.getLogger("compile_engine")
 autotvm_logger = logging.getLogger("autotvm")
@@ -91,6 +92,7 @@ def get_shape(shape):
                 assert val <= np.iinfo(np.int32).max
                 ret.append(tvm.tir.IntImm("int32", val))
         elif isinstance(dim, tvm.tir.Any):
+            pdb.set_trace()
             ret.append(te.var("any_dim", "int32"))
         else:
             ret.append(dim)

@@ -30,7 +30,7 @@ from tvm.relay import expr as _expr
 from tvm.relay.backend.interpreter import Executor
 from tvm.target import Target
 from . import _vm
-
+import pdb
 
 def compile(mod, target=None, target_host=None, params=None):
     """Compile the module to VM executable. A helper function for VMCompiler.
@@ -137,7 +137,11 @@ class VMCompiler(object):
         target, target_host = Target.check_and_update_host_consist(
             target, target_host, target_is_dict_key=False
         )
+        # (Pdb) type(target), target -- (<class 'dict'>, {1: llvm -keys=cpu -link-params=0})
+        # type(mod) -- <class 'tvm.ir.module.IRModule'>
+        # mod.get_global_vars() -- [GlobalVar(main)]
 
+        # type(tophub_context) -- <class 'tvm.autotvm.task.dispatcher.ApplyHistoryBest'>
         tophub_context = self._tophub_context(target)
         with tophub_context:
             self._lower(mod, target, target_host)
@@ -241,10 +245,21 @@ class VMCompiler(object):
         """Get the autotvm context."""
         # If current dispatch context is fallback context (the default root context),
         # then load pre-tuned parameters from TopHub
+
+        # isinstance(autotvm.DispatchContext.current, autotvm.FallbackContext) -- True
         if isinstance(autotvm.DispatchContext.current, autotvm.FallbackContext):
+            # target.values() -- dict_values([llvm -keys=cpu -link-params=0])
             tophub_context = autotvm.tophub.context(list(target.values()))
         else:
             tophub_context = autotvm.utils.EmptyContext()
+        # tophub_context.best_by_targetkey
+
+        # (workload=('conv2d_NCHWc.x86', 
+        # ('TENSOR', (1, 3, 224, 224), 'float32'), ('TENSOR', (64, 3, 7, 7), 'float32'), 
+        # (2, 2), (3, 3, 3, 3), (1, 1), 'NCHW', 'NCHW', 'float32')
+        # ), 
+        # config=[('tile_ic', [1, 3]), ('tile_oc', [2, 32]), ('tile_ow', [14, 8]), 
+
         return tophub_context
 
 

@@ -29,7 +29,7 @@ from tvm.autotvm.task.dispatcher import DispatchContext, FallbackContext
 from tvm.target import Target
 from .task import create
 from .topi_integration import TaskExtractEnv
-
+import pdb
 logger = logging.getLogger("autotvm")
 
 
@@ -39,6 +39,8 @@ def _lower(mod, target, params):
     # pylint: disable=import-outside-toplevel
     from tvm import relay
     from tvm.relay.backend import graph_executor_codegen
+
+    pdb.set_trace()
 
     if hasattr(target, "device_name") and target.device_name == "vta":
         import vta
