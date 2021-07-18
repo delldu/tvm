@@ -51,7 +51,7 @@ if __name__ == "__main__":
         so_path = "{}/cpu_{}.so".format(args.output, os.path.basename(args.input))
         ro_path = "{}/cpu_{}.ro".format(args.output, os.path.basename(args.input))
 
-    input_shape = (1, 3, 128, 128)
+    input_shape = (1, 3, 256, 512)
 
     def create_micro():
         import torch
@@ -109,6 +109,7 @@ if __name__ == "__main__":
         # )
         mod, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
         print(mod)
+
         # def @main(%input: Tensor[(1, 3, ?, ?), float32]) {
         #   %0 = nn.conv2d(%input, meta[relay.Constant][0], padding=[1, 1, 1, 1], kernel_size=[3, 3]);
         #   %1 = nn.bias_add(%0, meta[relay.Constant][1]);
