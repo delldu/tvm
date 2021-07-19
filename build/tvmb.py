@@ -15,9 +15,76 @@ import numpy as np
 import argparse
 import pdb  # For debug
 import os
+
 import onnx
+import onnxruntime
+
 import tvm
 from tvm import relay, runtime, contrib
+
+
+def create_micro():
+    import torch
+    import torch.nn as nn
+
+    class MicroModel(nn.Module):
+        def __init__(self):
+            """Init model."""
+            super(MicroModel, self).__init__()
+            self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            self.conv1x1 = nn.Conv2d(5, 5, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+            self.relu = nn.ReLU()
+
+        def forward(self, x):
+            x = self.conv3x3(x)
+            x = self.relu(x)
+            x = self.conv1x1(x)
+            x = self.relu(x)
+            return x
+
+    def onnx_export():
+        model = MicroModel()
+        model = model.eval()
+
+        x = torch.randn(onnx_input_shape)
+        # with torch.no_grad():
+        #     y = model(x)
+
+        torch.onnx.export(
+            model,
+            x,
+            "micro.onnx",
+            input_names=["input"],
+            output_names=["output"],
+            verbose=True,
+            opset_version=11,
+            keep_initializers_as_inputs=False,
+            export_params=True,
+        )
+
+    onnx_export()
+
+
+def onnx_load(onnx_file):
+    session_options = onnxruntime.SessionOptions()
+    # session_options.log_severity_level = 0
+
+    # Set graph optimization level
+    session_options.graph_optimization_level = (
+        onnxruntime.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    )
+
+    onnx_model = onnxruntime.InferenceSession(onnx_file, session_options)
+    # onnx_model.set_providers(['CUDAExecutionProvider'])
+    print(
+        "Onnx Model Engine: ",
+        onnx_model.get_providers(),
+        "Device: ",
+        onnxruntime.get_device(),
+    )
+
+    return onnx_model
+
 
 if __name__ == "__main__":
 
@@ -33,133 +100,93 @@ if __name__ == "__main__":
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
+    if not os.path.exists("micro.onnx"):
+        create_micro()
+
     # /************************************************************************************
     # ***
     # ***    MS: Define Global Names
     # ***
     # ************************************************************************************/
-    if args.gpu:
-        target = tvm.target.Target("cuda", host="llvm --runtime=c++ --system-lib")
-    else:
-        target = tvm.target.Target("llvm", host="llvm --runtime=c++ --system-lib")
-    device = tvm.device(str(target), 0)
+    devname = "cuda" if args.gpu else "llvm"
+    target = tvm.target.Target(devname, host="llvm --link-params=0")
+    device = tvm.device(devname, 0)
 
-    if args.gpu:
-        onnx_so_path = "{}/cuda_{}.so".format(args.output, os.path.basename(args.input))
-        onnx_json_path = "{}/cuda_{}.json".format(args.output, os.path.basename(args.input))
-        onnx_params_path = "{}/cuda_{}.bin".format(args.output, os.path.basename(args.input))
-    else:
-        onnx_so_path = "{}/cpu_{}.so".format(args.output, os.path.basename(args.input))
-        onnx_json_path = "{}/cpu_{}.json".format(args.output, os.path.basename(args.input))
-        onnx_params_path = "{}/cpu_{}.bin".format(args.output, os.path.basename(args.input))
+    onnx_so_path = "{}/{}_{}.so".format(args.output, devname, os.path.basename(args.input))
+    onnx_json_path = "{}/{}_{}.json".format(args.output, devname, os.path.basename(args.input))
+    onnx_params_path = "{}/{}_{}.bin".format(args.output, devname, os.path.basename(args.input))
 
     onnx_input_shape = (1, 3, 256, 256)
+    onnx_shape_dict = {"input": onnx_input_shape}
 
-    def create_micro():
-        import torch
-        import torch.nn as nn
-
-        class MicroModel(nn.Module):
-            def __init__(self):
-                """Init model."""
-                super(MicroModel, self).__init__()
-                self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-                self.conv1x1 = nn.Conv2d(5, 5, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-                self.relu = nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv3x3(x)
-                x = self.relu(x)
-                x = self.conv1x1(x)
-                x = self.relu(x)
-                return x
-
-        def onnx_export():
-            model = MicroModel()
-            model = model.eval()
-
-            x = torch.randn(onnx_input_shape)
-            # with torch.no_grad():
-            #     y = model(x)
-
-            torch.onnx.export(
-                model,
-                x,
-                "micro.onnx",
-                input_names=["input"],
-                output_names=["output"],
-                verbose=True,
-                opset_version=11,
-                keep_initializers_as_inputs=False,
-                export_params=True,
-            )
-
-        onnx_export()
-
+    # /************************************************************************************
+    # ***
+    # ***    Build Mdel
+    # ***
+    # ************************************************************************************/
     def build():
-        """Building model."""
-
         print("Building model on {} ...".format(target))
 
         onnx_model = onnx.load(args.input)
 
         mod, params = relay.frontend.from_onnx(
-            onnx_model, shape={"input": onnx_input_shape}, freeze_params=True
+            onnx_model, shape=onnx_shape_dict, freeze_params=True
         )
         print(mod)
 
-        # def @main(%input: Tensor[(1, 3, ?, ?), float32]) {
-        #   %0 = nn.conv2d(%input, meta[relay.Constant][0], padding=[1, 1, 1, 1], kernel_size=[3, 3]);
-        #   %1 = nn.bias_add(%0, meta[relay.Constant][1]);
-        #   nn.relu(%1)
-        # }
-
-        with tvm.transform.PassContext(opt_level=3, config={"tir.disable_vectorize": True}):
+        with tvm.transform.PassContext(opt_level=3, config={"tir.disable_vectorize": False}):
             graph, lib, params = relay.build(mod, target=target, params=params)
 
         lib.export_library(onnx_so_path)
 
-        with open(onnx_json_path, "w") as f_json:
-            f_json.write(graph)
+        with open(onnx_json_path, "w") as json_file:
+            json_file.write(graph)
 
-        with open(onnx_params_path, "wb") as f_bin:
-            f_bin.write(runtime.save_param_dict(params))
+        with open(onnx_params_path, "wb") as params_file:
+            params_file.write(runtime.save_param_dict(params))
 
         print("Building model OK")
 
-    def verify():
-        """Verify model."""
 
+    # /************************************************************************************
+    # ***
+    # ***    Verify Mdel
+    # ***
+    # ************************************************************************************/
+    def verify():
         print("Running model on {} ...".format(device))
 
         np_data = np.random.uniform(size=onnx_input_shape).astype("float32")
         nd_data = tvm.nd.array(np_data, device)
 
         # Load module
-        loaded_json = open(onnx_json_path).read()
+        graph = open(onnx_json_path).read()
         loaded_solib = runtime.load_module(onnx_so_path)
         loaded_params = bytearray(open(onnx_params_path, "rb").read())
 
-        mod = contrib.graph_executor.create(loaded_json, loaded_solib, device)
+        mod = contrib.graph_executor.create(graph, loaded_solib, device)
         mod.load_params(loaded_params)
 
-        # Run
+        # TVM Run
         mod.set_input("input", nd_data)
         mod.run()
         output_data = mod.get_output(0)
 
-        print(output_data.numpy())
+        print(output_data)
+
+        onnxruntime_engine = onnx_load(args.input)
+        onnxruntime_inputs = {onnxruntime_engine.get_inputs()[0].name: np_data}
+        onnxruntime_outputs = onnxruntime_engine.run(None, onnxruntime_inputs)
+
+        np.testing.assert_allclose(
+            output_data.numpy(), onnxruntime_outputs[0], rtol=1e-03, atol=1e-03
+        )
         print("Running model OK.")
 
         print("Evaluating ...")
         ftimer = mod.module.time_evaluator("run", device, number=2, repeat=10)
         prof_res = np.array(ftimer().results) * 1000  # multiply 1000 for ms
-        print(
-            "Mean running time (std dev): %.2f ms (%.2f ms)" % (np.mean(prof_res), np.std(prof_res))
-        )
-
-    if not os.path.exists("micro.onnx"):
-        create_micro()
+        print("Mean running time: %.2f ms (stdv: %.2f ms)" % (np.mean(prof_res), np.std(prof_res)))
 
     if not os.path.exists(args.input):
         print("ONNX model file {} not exist.".format(args.input))
