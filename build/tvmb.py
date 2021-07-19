@@ -17,7 +17,7 @@ import pdb  # For debug
 import os
 import onnx
 import tvm
-from tvm import relay, runtime
+from tvm import relay, runtime, contrib
 
 if __name__ == "__main__":
 
@@ -39,19 +39,21 @@ if __name__ == "__main__":
     # ***
     # ************************************************************************************/
     if args.gpu:
-        target = tvm.target.Target("cuda", host="llvm")
+        target = tvm.target.Target("cuda", host="llvm --runtime=c++ --system-lib")
     else:
-        target = tvm.target.Target("llvm", host="llvm")
+        target = tvm.target.Target("llvm", host="llvm --runtime=c++ --system-lib")
     device = tvm.device(str(target), 0)
 
     if args.gpu:
-        so_path = "{}/cuda_{}.so".format(args.output, os.path.basename(args.input))
-        ro_path = "{}/cuda_{}.ro".format(args.output, os.path.basename(args.input))
+        onnx_so_path = "{}/cuda_{}.so".format(args.output, os.path.basename(args.input))
+        onnx_json_path = "{}/cuda_{}.json".format(args.output, os.path.basename(args.input))
+        onnx_params_path = "{}/cuda_{}.bin".format(args.output, os.path.basename(args.input))
     else:
-        so_path = "{}/cpu_{}.so".format(args.output, os.path.basename(args.input))
-        ro_path = "{}/cpu_{}.ro".format(args.output, os.path.basename(args.input))
+        onnx_so_path = "{}/cpu_{}.so".format(args.output, os.path.basename(args.input))
+        onnx_json_path = "{}/cpu_{}.json".format(args.output, os.path.basename(args.input))
+        onnx_params_path = "{}/cpu_{}.bin".format(args.output, os.path.basename(args.input))
 
-    input_shape = (1, 3, 256, 512)
+    onnx_input_shape = (1, 3, 256, 256)
 
     def create_micro():
         import torch
@@ -76,13 +78,9 @@ if __name__ == "__main__":
             model = MicroModel()
             model = model.eval()
 
-            x = torch.randn(1, 3, 256, 256)
-            with torch.no_grad():
-                y = model(x)
-
-            dynamic_axes = {
-                "input": {2: "height", 3: "width"},
-            }
+            x = torch.randn(onnx_input_shape)
+            # with torch.no_grad():
+            #     y = model(x)
 
             torch.onnx.export(
                 model,
@@ -93,7 +91,6 @@ if __name__ == "__main__":
                 verbose=True,
                 opset_version=11,
                 keep_initializers_as_inputs=False,
-                dynamic_axes=dynamic_axes,
                 export_params=True,
             )
 
@@ -106,11 +103,9 @@ if __name__ == "__main__":
 
         onnx_model = onnx.load(args.input)
 
-        # Parsing onnx model
-        # mod, params = relay.frontend.from_onnx(
-        #     onnx_model, {"input": input_shape}, freeze_params=True
-        # )
-        mod, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
+        mod, params = relay.frontend.from_onnx(
+            onnx_model, shape={"input": onnx_input_shape}, freeze_params=True
+        )
         print(mod)
 
         # def @main(%input: Tensor[(1, 3, ?, ?), float32]) {
@@ -119,64 +114,16 @@ if __name__ == "__main__":
         #   nn.relu(%1)
         # }
 
-        with tvm.transform.PassContext(opt_level=3):
-            vm_exec = relay.vm.compile(mod, target=target, params=params)
+        with tvm.transform.PassContext(opt_level=3, config={"tir.disable_vectorize": True}):
+            graph, lib, params = relay.build(mod, target=target, params=params)
 
-        code, lib = vm_exec.save()
-        pdb.set_trace()
-        
-        lib.export_library(so_path)
-        with open(ro_path, "wb") as fo:
-            fo.write(code)
+        lib.export_library(onnx_so_path)
 
-        # (Pdb) print(vm_exec.bytecode)
-        # VM Function[0]: main(input)
-        # # reg file size = 15
-        # # instruction count = 18
-        # opcode, fields # inst(text):
-        #  0: 11 0 1   # load_const $1 Const[0]
-        #  1: 16 1 64 2 32 1 1 2   # alloc_storage $2 $1 64 float32 1
-        # ==> alloc_storage(size, alignment, device, dtype_hint="float32"):
+        with open(onnx_json_path, "w") as f_json:
+            f_json.write(graph)
 
-        #  2: 11 1 3   # load_const $3 Const[1]
-        #  3: 5 2 3 2 32 1 5 4 1 1 512 512 3   # alloc_tensor $4 $2 $3 [1, 1, 512, 512, 3] float32
-        # ==> alloc_tensor(storage, offset, shape=[1, 1, 512, 512, 3], dtype="float32", assert_shape=None)
-
-        #  4: 4 0 2 1 0 4   # invoke_packed PackedFunc[0] (in: $0, out: $4)
-        # ==> fused_layout_transform_2
-
-        #  5: 11 2 5   # load_const $5 Const[2]
-        #  6: 16 5 64 2 32 1 1 6   # alloc_storage $6 $5 64 float32 1
-        # ==> alloc_storage(size, alignment, device, dtype_hint="float32"):
-
-        #  7: 11 3 7   # load_const $7 Const[3]
-        #  8: 5 6 7 2 32 1 5 8 1 1 512 512 8   # alloc_tensor $8 $6 $7 [1, 1, 512, 512, 8] float32
-        # ==> alloc_tensor(storage, offset, shape=[1, 1, 512, 512, 8], dtype="float32", assert_shape=None)
-
-        #  9: 11 4 9   # load_const $9 Const[4]
-        # 10: 11 5 10   # load_const $10 Const[5]
-        # 11: 4 1 4 1 4 9 10 8   # invoke_packed PackedFunc[1] (in: $4, $9, $10, out: $8)
-        # 12: 11 6 11   # load_const $11 Const[6]
-        # 13: 16 11 64 2 32 1 1 12   # alloc_storage $12 $11 64 float32 1
-        # 14: 11 7 13   # load_const $13 Const[7]
-
-        # 15: 5 12 13 2 32 1 4 14 1 8 512 512   # alloc_tensor $14 $12 $13 [1, 8, 512, 512] float32
-        # ==> alloc_tensor(storage, offset, shape=[1, 8, 512, 512], dtype="float32", assert_shape=None)
-
-        # 16: 4 2 2 1 8 14   # invoke_packed PackedFunc[2] (in: $8, out: $14)
-        # ==> fused_layout_transform_3
-
-        # 17: 1 14   # ret $14
-
-        # (Pdb) print(vm_exec.stats)
-        # Relay VM executable statistics:
-        #   Constant shapes (# 8): [scalar, scalar, scalar, scalar, [1, 1, 3, 3, 3, 8], 
-        # [1, 1, 1, 1, 8], 
-        # scalar, scalar]
-        #   Globals (#1): [("main", 0)]
-        #   Primitive ops (#3): [fused_layout_transform_2, fused_nn_contrib_conv2d_NCHWc_add_nn_relu, 
-        #  fused_layout_transform_3]
-
+        with open(onnx_params_path, "wb") as f_bin:
+            f_bin.write(runtime.save_param_dict(params))
 
         print("Building model OK")
 
@@ -185,22 +132,28 @@ if __name__ == "__main__":
 
         print("Running model on {} ...".format(device))
 
-        np_data = np.random.uniform(size=input_shape).astype("float32")
+        np_data = np.random.uniform(size=onnx_input_shape).astype("float32")
         nd_data = tvm.nd.array(np_data, device)
 
-        loaded_lib = runtime.load_module(so_path)
-        loaded_code = bytearray(open(ro_path, "rb").read())
-        vm_exec = runtime.vm.Executable.load_exec(loaded_code, loaded_lib)
-        vm = runtime.vm.VirtualMachine(vm_exec, device)
+        # Load module
+        loaded_json = open(onnx_json_path).read()
+        loaded_solib = runtime.load_module(onnx_so_path)
+        loaded_params = bytearray(open(onnx_params_path, "rb").read())
 
-        output_data = vm.run(nd_data)
+        mod = contrib.graph_executor.create(loaded_json, loaded_solib, device)
+        mod.load_params(loaded_params)
+
+        # Run
+        mod.set_input("input", nd_data)
+        mod.run()
+        output_data = mod.get_output(0)
 
         print(output_data.numpy())
         print("Running model OK.")
 
         print("Evaluating ...")
-        ftimer = vm.module.time_evaluator("invoke", device, number=2, repeat=10)
-        prof_res = np.array(ftimer("main", nd_data).results) * 1000  # multiply 1000 for ms
+        ftimer = mod.module.time_evaluator("run", device, number=2, repeat=10)
+        prof_res = np.array(ftimer().results) * 1000  # multiply 1000 for ms
         print(
             "Mean running time (std dev): %.2f ms (%.2f ms)" % (np.mean(prof_res), np.std(prof_res))
         )
