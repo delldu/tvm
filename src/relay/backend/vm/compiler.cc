@@ -871,26 +871,20 @@ class VMFunctionCompiler : ExprFunctor<void(const Expr& expr)> {
 
 PackedFunc VMCompiler::GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) {
   if (name == "lower") {
-    LOG(INFO) << "lower xxxx8888";
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       ICHECK_EQ(args.num_args, 3);
       IRModule mod = args[0];
       this->Lower(mod, args[1], args[2]);
     });
   } else if (name == "codegen") {
-    LOG(INFO) << "codegen xxxx8888";
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       ICHECK_EQ(args.num_args, 0);
       this->Codegen();
     });
   } else if (name == "get_executable") {
-    LOG(INFO) << "get_executable xxxx8888";
-
     return PackedFunc(
         [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = runtime::Module(exec_); });
   } else if (name == "set_params") {
-    LOG(INFO) << "set_params xxxx8888";
-
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       Map<String, Constant> params = args[0];
       for (const auto& kv : params) {
@@ -898,8 +892,6 @@ PackedFunc VMCompiler::GetFunction(const std::string& name, const ObjectPtr<Obje
       }
     });
   } else if (name == "get_params") {
-    LOG(INFO) << "get_params xxxx8888";
-
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       Map<String, Constant> ret;
       for (const auto& kv : params_) {
@@ -908,8 +900,6 @@ PackedFunc VMCompiler::GetFunction(const std::string& name, const ObjectPtr<Obje
       *rv = ret;
     });
   } else if (name == "optimize") {
-    LOG(INFO) << "optimize xxxx8888";
-
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       ICHECK_EQ(args.num_args, 3);
       *rv = this->OptimizeModule(args[0], args[1], args[2]);
@@ -925,7 +915,6 @@ void VMCompiler::SetParam(const std::string& name, runtime::NDArray data_in) {
 }
 
 void VMCompiler::Lower(IRModule mod, const TargetsMap& targets, const tvm::Target& target_host) {
-  LOG(INFO) << "lower xxxx8888";
   exec_ = make_object<Executable>();
   targets_ = targets;
   target_host_ = target_host;

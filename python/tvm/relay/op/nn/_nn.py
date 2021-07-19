@@ -214,11 +214,12 @@ reg.register_pattern("nn.conv1d", OpPattern.OUT_ELEMWISE_FUSABLE)
 reg.register_strategy("nn.conv2d", strategy.conv2d_strategy)
 reg.register_pattern("nn.conv2d", OpPattern.OUT_ELEMWISE_FUSABLE)
 
-# xxxx8888
+
 @reg.register_alter_op_layout("nn.conv2d")
 def alter_op_layout_conv2d(attrs, inputs, tinfos, out_type):
     """Alternate the layout of conv2d"""
     return topi.nn.conv2d_alter_layout(attrs, inputs, tinfos, out_type)
+
 
 @reg.register_legalize("nn.conv2d")
 def legalize_conv2d(attrs, inputs, types):
@@ -1338,7 +1339,6 @@ reg.register_shape_func("nn.bias_add", False, elemwise_shape_func)
 reg.register_shape_func("nn.softmax", False, elemwise_shape_func)
 reg.register_shape_func("nn.fast_softmax", False, elemwise_shape_func)
 reg.register_shape_func("nn.relu", False, elemwise_shape_func)
-# xxxx8888
 reg.register_shape_func("nn.leaky_relu", False, elemwise_shape_func)
 
 

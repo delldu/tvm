@@ -36,8 +36,6 @@ from tvm.te import schedule, thread_axis
 from tvm.tir import expr
 from tvm.autotvm.utils import get_const_int
 
-import pdb
-
 Axis = namedtuple("Axis", ["space", "index"])
 
 try:
@@ -122,7 +120,6 @@ class VirtualAxis(TransformSpace):
 
     def __init__(self, var, name=None):
         super(VirtualAxis, self).__init__()
-
         self.num_output = 1
 
         if name is None:
@@ -137,21 +134,11 @@ class VirtualAxis(TransformSpace):
             if var.dom is None:
                 self.length = -1
             else:
-                # xxxx8888, xxxxx3333
-                # var -- iter_var(ff, range(min=0, ext=8)), type(var) -- <class 'tvm.tir.expr.IterVar'>
-                # iter_var(yy, range(min=0, ext=height)) -- 
-                # self.length = get_const_int(var.dom.extent)
-                self.length = var.dom.extent
+                self.length = get_const_int(var.dom.extent)
         elif isinstance(var, VirtualAxis):
             self.length = var.length
         else:
-            pdb.set_trace()
-            # xxxx8888, xxxx3333
-            # var -- ((((width - 3) + 1) + 1) + 1),  (Pdb) type(var) -- <class 'tvm.tir.expr.Add'>
-            # self.length = var
-            # var == ((((width - 3) + 1) + 1) + 1)
-            self.length = 4096
-            # raise RuntimeError("Invalid type of axis: " + str(type(var)))
+            raise RuntimeError("Invalid type of axis: " + str(type(var)))
 
     @staticmethod
     def get_num_output(var, name=None):
@@ -174,12 +161,7 @@ def get_factors(n):
     factors: list
         List of all factors
     """
-    try:
-        step = 2 if n % 2 else 1
-    except:
-        # xxxx8888, xxxx3333
-        pdb.set_trace()
-
+    step = 2 if n % 2 else 1
     ret = list(
         set(
             functools.reduce(
@@ -231,7 +213,6 @@ class SplitSpace(TransformSpace):
         else:
             if policy == "verbose":
                 # Include factors and power-of-twos. May generate tails.
-                # xxxx8888, xxxx3333, self.product -- ((((width - 3) + 1) + 1) + 1), tvm.tir.expr.Add
                 divisibles = get_factors(self.product)
                 pow2s = get_pow2s(self.product)
                 factors = [x for x in list(set(divisibles) | set(pow2s)) if x <= max_factor]
@@ -812,12 +793,6 @@ class ConfigSpace(object):
         """
         if isinstance(flop, (expr.IntImm, expr.FloatImm)):
             flop = flop.value
-        if not isinstance(flop, (int, float)):
-            # xxxx8888, xxxx3333
-            # flop -- (((((16*((((height + 1) + 1) - 3) + 1))*((((width + 1) + 1) - 3) + 1))*3)*3)*3)
-
-            flop = 2 * 2048 * 4096 * 8 * 3 * 3 * 3
-
         self.flop += float(flop)
 
     def raise_error(self, msg):
@@ -851,12 +826,6 @@ class ConfigSpace(object):
         """Add a new transform space in template"""
         if self._collect:
             # convert schedule axis to space definition axis
-            # for x in axes:
-            #     print("xxxx8888: axes: x=", x, ", type(x):", type(x))
-            #     # xxxx8888: axes: x= 3 , type(x): <class 'int'>
-            #     # xxxx8888: axes: x= 8 , type(x): <class 'int'>
-            #     # xxxx8888: axes: x= ((((width: int32 - 3) + 1) + 1) + 1) , type(x): <class 'tvm.tir.expr.Add'>
-            # xxxx3333
             axes = [x if isinstance(x, (VirtualAxis, Axis)) else self.axis(x) for x in axes]
 
             # add subspace (knob)

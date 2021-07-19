@@ -563,7 +563,6 @@ class MakeShapeFunc : public backend::MemoizedExprTranslator<Array<te::Tensor>> 
     ICHECK(data_dependents_per_input_.empty() || !data_dependents_per_input_.back())
         << "Error in op fusion: output of the shape func is fed to a "
         << "data-dependent shape func";
-    // xxxx8888
     ICHECK_GT(fshape_func.count(op), 0) << "Internal error, cannot find ShapeFunc for " << op->name;
     ICHECK_GT(tshape_data_dependent.count(op), 0)
         << "Internal error, cannot find TShapeDataDependent for " << op->name;

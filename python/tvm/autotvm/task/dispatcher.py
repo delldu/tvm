@@ -36,7 +36,7 @@ import numpy as np
 
 from .space import FallbackConfigEntity
 from .. import env as _env
-import pdb
+
 logger = logging.getLogger("autotvm")
 
 
@@ -310,8 +310,6 @@ class FallbackContext(DispatchContext):
             return self.memory[key]
 
         if not _env.GLOBAL_SCOPE.silent:
-            pdb.set_trace()
-            
             msg = (
                 "Cannot find config for target=%s, workload=%s. A fallback configuration "
                 "is used, which may bring great performance regression." % (target, workload)
@@ -320,17 +318,9 @@ class FallbackContext(DispatchContext):
                 DispatchContext.warning_messages.add(msg)
                 logger.warning(msg)
         cfg = FallbackConfigEntity()
-        # xxxx8888
-        # workload -- ('conv2d_NCHWc.x86', 
-        #     ('TENSOR', (1, 3, ?, ?), 'float32'), 
-        #     ('TENSOR', (40, 3, 3, 3), 'float32'), 
-        #     (1, 1), (1, 1, 1, 1), (1, 1), 'NCHW', 'NCHW', 'float32')
 
         # cache this config
         self.memory[key] = cfg
-        # type(cfg) -- 'tvm.autotvm.task.space.FallbackConfigEntity'>
-        # cfg = ,None
-
         return cfg
 
     def clear_cache(self, target, workload):

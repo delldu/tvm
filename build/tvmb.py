@@ -123,6 +123,8 @@ if __name__ == "__main__":
             vm_exec = relay.vm.compile(mod, target=target, params=params)
 
         code, lib = vm_exec.save()
+        pdb.set_trace()
+        
         lib.export_library(so_path)
         with open(ro_path, "wb") as fo:
             fo.write(code)

@@ -364,9 +364,6 @@ struct AttrInitEntry {
   // override fields.
   // This function sets the lower bound of the attribute
   TSelf& set_lower_bound(const T& begin) {
-    // xxxx8888
-    LOG(INFO) << "set_lower_bound";
-
     if (this->value_missing_) return *this;
     const T& val = *value_;
     if (begin > val) {
@@ -379,9 +376,6 @@ struct AttrInitEntry {
   }
   // This function sets the upper bound of the attribute
   TSelf& set_upper_bound(const T& end) {
-    // xxxx8888
-    LOG(INFO) << "set_upper_bound";
-
     if (this->value_missing_) return *this;
     const T& val = *value_;
     if (val > end) {

@@ -48,7 +48,7 @@ from .common import (
     infer_value,
     new_var,
 )
-import pdb
+
 __all__ = ["from_onnx"]
 
 
