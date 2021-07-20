@@ -22,49 +22,6 @@ import onnxruntime
 import tvm
 from tvm import relay, runtime, contrib
 
-
-def create_micro():
-    import torch
-    import torch.nn as nn
-
-    class MicroModel(nn.Module):
-        def __init__(self):
-            """Init model."""
-            super(MicroModel, self).__init__()
-            self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-            self.conv1x1 = nn.Conv2d(5, 5, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-            self.relu = nn.ReLU()
-
-        def forward(self, x):
-            x = self.conv3x3(x)
-            x = self.relu(x)
-            x = self.conv1x1(x)
-            x = self.relu(x)
-            return x
-
-    def onnx_export():
-        model = MicroModel()
-        model = model.eval()
-
-        x = torch.randn(onnx_input_shape)
-        # with torch.no_grad():
-        #     y = model(x)
-
-        torch.onnx.export(
-            model,
-            x,
-            "micro.onnx",
-            input_names=["input"],
-            output_names=["output"],
-            verbose=True,
-            opset_version=11,
-            keep_initializers_as_inputs=False,
-            export_params=True,
-        )
-
-    onnx_export()
-
-
 def onnx_load(onnx_file):
     session_options = onnxruntime.SessionOptions()
     # session_options.log_severity_level = 0
@@ -89,7 +46,7 @@ def onnx_load(onnx_file):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("input", type=str, help="input onnx file (eg: micro.onnx)")
+    parser.add_argument("input", type=str, help="input onnx file (eg: mini.onnx)")
     parser.add_argument("-b", "--build", help="build model", action="store_true")
     parser.add_argument("-v", "--verify", help="verify model", action="store_true")
     parser.add_argument("-g", "--gpu", help="use gpu", action="store_true")
@@ -99,9 +56,6 @@ if __name__ == "__main__":
 
     if not os.path.exists(args.output):
         os.makedirs(args.output)
-
-    if not os.path.exists("micro.onnx"):
-        create_micro()
 
     # /************************************************************************************
     # ***
@@ -119,12 +73,62 @@ if __name__ == "__main__":
     onnx_input_shape = (1, 3, 256, 256)
     onnx_shape_dict = {"input": onnx_input_shape}
 
+
+    # /************************************************************************************
+    # ***
+    # ***    Create Model
+    # ***
+    # ************************************************************************************/
+    def create_model():
+        import torch
+        import torch.nn as nn
+
+        class MiniModel(nn.Module):
+            def __init__(self):
+                """Init model."""
+                super(MiniModel, self).__init__()
+                self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+                self.conv1x1 = nn.Conv2d(5, 5, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+                self.relu = nn.ReLU()
+                nn.init.kaiming_normal_(self.conv3x3.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(self.conv1x1.weight, mode='fan_out', nonlinearity='relu')
+
+            def forward(self, x):
+                x = self.conv3x3(x)
+                x = self.relu(x)
+                x = self.conv1x1(x)
+                x = self.relu(x)
+                return x
+
+        def onnx_export():
+            model = MiniModel()
+            model = model.eval()
+
+            x = torch.randn(onnx_input_shape)
+            # with torch.no_grad():
+            #     y = model(x)
+
+            torch.onnx.export(
+                model,
+                x,
+                "mini.onnx",
+                input_names=["input"],
+                output_names=["output"],
+                verbose=True,
+                opset_version=11,
+                keep_initializers_as_inputs=False,
+                export_params=True,
+            )
+
+        onnx_export()
+
+
     # /************************************************************************************
     # ***
     # ***    Build Mdel
     # ***
     # ************************************************************************************/
-    def build():
+    def build_model():
         print("Building model on {} ...".format(target))
 
         onnx_model = onnx.load(args.input)
@@ -134,7 +138,7 @@ if __name__ == "__main__":
         )
         print(mod)
 
-        with tvm.transform.PassContext(opt_level=3, config={"tir.disable_vectorize": False}):
+        with tvm.transform.PassContext(opt_level=3):
             graph, lib, params = relay.build(mod, target=target, params=params)
 
         lib.export_library(onnx_so_path)
@@ -153,7 +157,7 @@ if __name__ == "__main__":
     # ***    Verify Mdel
     # ***
     # ************************************************************************************/
-    def verify():
+    def verify_model():
         print("Running model on {} ...".format(device))
 
         np_data = np.random.uniform(size=onnx_input_shape).astype("float32")
@@ -171,8 +175,12 @@ if __name__ == "__main__":
         mod.set_input("input", nd_data)
         mod.run()
         output_data = mod.get_output(0)
-
         print(output_data)
+
+        print("Evaluating ...")
+        ftimer = mod.module.time_evaluator("run", device, number=2, repeat=10)
+        prof_res = np.array(ftimer().results) * 1000  # multiply 1000 for ms
+        print("Mean running time: %.2f ms (stdv: %.2f ms)" % (np.mean(prof_res), np.std(prof_res)))
 
         onnxruntime_engine = onnx_load(args.input)
         onnxruntime_inputs = {onnxruntime_engine.get_inputs()[0].name: np_data}
@@ -183,17 +191,21 @@ if __name__ == "__main__":
         )
         print("Running model OK.")
 
-        print("Evaluating ...")
-        ftimer = mod.module.time_evaluator("run", device, number=2, repeat=10)
-        prof_res = np.array(ftimer().results) * 1000  # multiply 1000 for ms
-        print("Mean running time: %.2f ms (stdv: %.2f ms)" % (np.mean(prof_res), np.std(prof_res)))
+
+    # /************************************************************************************
+    # ***
+    # ***    Flow Control
+    # ***
+    # ************************************************************************************/
+    if not os.path.exists("mini.onnx"):
+        create_model()
 
     if not os.path.exists(args.input):
         print("ONNX model file {} not exist.".format(args.input))
         os._exit(0)
 
     if args.build:
-        build()
+        build_model()
 
     if args.verify:
-        verify()
+        verify_model()
