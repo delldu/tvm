@@ -2311,25 +2311,6 @@ class PyTorchOpConverter:
         axis = inputs[1]
         return _op.transform.reverse(data, axis=axis[0])
 
-<<<<<<< HEAD
-    def grid_sampler(self, inputs, input_types):
-        data = inputs[0]
-        grid = inputs[1]
-
-        # Torch grid shape is like [batch, out_height, out_width, 2], but
-        # TVM grid is [batch, 2, out_height, out_width], so here grid need to be converted
-        grid = _op.transform.transpose(grid, axes=[0, 3, 1, 2])
-        return _op.image.grid_sample(data, grid, method="bilinear", layout="NCHW")
-
-    def im2col(self, inputs, input_types):
-        data = inputs[0]
-        kernel_size = inputs[1]
-        dilation = inputs[2]
-        padding = inputs[3]
-        stride = inputs[4]
-
-        return _op.nn.im2col(data, kernel_size, dilation, padding, stride)
-=======
     def bidir_lstm_cell(
         self,
         input_seqs,
@@ -2585,7 +2566,6 @@ class PyTorchOpConverter:
             output = _op.transpose(output, (1, 0, 2))
 
         return (output, _op.stack(hy, 0), _op.stack(cy, 0))
->>>>>>> 3ebd353a7f526cdf21293055a00eeeabe6efae1f
 
     # Operator mappings
     def create_convert_map(self):

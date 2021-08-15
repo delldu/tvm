@@ -1342,11 +1342,5 @@ reg.register_shape_func("nn.bias_add", False, elemwise_shape_func)
 reg.register_shape_func("nn.softmax", False, elemwise_shape_func)
 reg.register_shape_func("nn.fast_softmax", False, elemwise_shape_func)
 reg.register_shape_func("nn.relu", False, elemwise_shape_func)
-<<<<<<< HEAD
-
-
-reg.register_injective_schedule("nn.im2col")
-=======
 reg.register_shape_func("nn.leaky_relu", False, elemwise_shape_func)
 reg.register_shape_func("nn.prelu", False, elemwise_shape_func)
->>>>>>> 3ebd353a7f526cdf21293055a00eeeabe6efae1f
