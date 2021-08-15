@@ -23,11 +23,11 @@ import tvm
 from tvm import te, runtime
 import logging
 import json
-from tvm.contrib import cc as _cc
+# from tvm.contrib import cc as _cc
 
 RUNTIMES = {
     "c": "{name}_c.{ext}",
-    "c++": "{name}_cpp.{ext}",
+    # "c++": "{name}_cpp.{ext}",
 }
 
 

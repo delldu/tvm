@@ -8,7 +8,7 @@
 # ***
 # ************************************************************************************/
 #
-"""tvmb -- TVM Building System ..."""
+"""tvmb -- TVM Building Onnx ..."""
 
 import numpy as np
 
@@ -21,6 +21,7 @@ import onnxruntime
 
 import tvm
 from tvm import relay, runtime, contrib
+
 
 def onnx_load(onnx_file):
     session_options = onnxruntime.SessionOptions()
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("-b", "--build", help="build model", action="store_true")
     parser.add_argument("-v", "--verify", help="verify model", action="store_true")
     parser.add_argument("-g", "--gpu", help="use gpu", action="store_true")
-    parser.add_argument("-o", "--output", type=str, default="models", help="output folder")
+    parser.add_argument("-o", "--output", type=str, default="output", help="output folder")
 
     args = parser.parse_args()
 
@@ -73,7 +74,6 @@ if __name__ == "__main__":
     onnx_input_shape = (1, 3, 256, 256)
     onnx_shape_dict = {"input": onnx_input_shape}
 
-
     # /************************************************************************************
     # ***
     # ***    Create Model
@@ -90,8 +90,8 @@ if __name__ == "__main__":
                 self.conv3x3 = nn.Conv2d(3, 5, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
                 self.conv1x1 = nn.Conv2d(5, 5, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
                 self.relu = nn.ReLU()
-                nn.init.kaiming_normal_(self.conv3x3.weight, mode='fan_out', nonlinearity='relu')
-                nn.init.kaiming_normal_(self.conv1x1.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(self.conv3x3.weight, mode="fan_out", nonlinearity="relu")
+                nn.init.kaiming_normal_(self.conv1x1.weight, mode="fan_out", nonlinearity="relu")
 
             def forward(self, x):
                 x = self.conv3x3(x)
@@ -122,7 +122,6 @@ if __name__ == "__main__":
 
         onnx_export()
 
-
     # /************************************************************************************
     # ***
     # ***    Build Mdel
@@ -150,7 +149,6 @@ if __name__ == "__main__":
             params_file.write(runtime.save_param_dict(params))
 
         print("Building model OK")
-
 
     # /************************************************************************************
     # ***
@@ -190,7 +188,6 @@ if __name__ == "__main__":
             output_data.numpy(), onnxruntime_outputs[0], rtol=1e-03, atol=1e-03
         )
         print("Running model OK.")
-
 
     # /************************************************************************************
     # ***
