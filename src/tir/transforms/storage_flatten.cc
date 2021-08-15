@@ -198,7 +198,7 @@ class StorageFlattener : public StmtExprMutator {
       auto new_var =
           Var(op->buffer->data->name_hint, PointerType(ptr_type->element_type, skey.to_string()));
       e.buffer = Buffer(new_var, op->buffer->dtype, shape, strides, PrimExpr(), op->buffer->name,
-                        skey.to_string(), align, 0, kDefault);
+                        align, 0, kDefault);
 
       buf_map_[key] = e;
       Stmt body = this->VisitStmt(op->body);
@@ -224,7 +224,6 @@ class StorageFlattener : public StmtExprMutator {
         ret = Allocate(e.buffer->data, storage_type, shape,
                        make_const(DataType::Bool(e.buffer->dtype.lanes()), true), body);
       }
-      ret = AttrStmt(e.buffer->data, attr::storage_scope, StringImm(e.buffer->scope), ret);
 
       if (create_bound_attributes_ && ShapeIsValid(e.buffer->shape)) {
         ret = AttrStmt(e.buffer->data, tir::attr::buffer_bound,
@@ -501,13 +500,19 @@ class StorageFlattener : public StmtExprMutator {
 };
 
 PrimFunc StorageFlatten(PrimFunc func, int cache_line_size, bool create_bound_attributes) {
-  auto fptr = func.CopyOnWrite();
+  // Only apply this pass to TIR from TE schedules
+  Optional<Bool> from_legacy_te_schedule = func->GetAttr("from_legacy_te_schedule", Bool(false));
+  if (from_legacy_te_schedule.value()) {
+    auto fptr = func.CopyOnWrite();
 
-  IRVisitorWithAnalyzer bound_analyzer;
-  bound_analyzer(fptr->body);
-  fptr->body = StorageFlattener(fptr->buffer_map, cache_line_size, create_bound_attributes,
-                                &bound_analyzer)(std::move(fptr->body));
-  return func;
+    IRVisitorWithAnalyzer bound_analyzer;
+    bound_analyzer(fptr->body);
+    fptr->body = StorageFlattener(fptr->buffer_map, cache_line_size, create_bound_attributes,
+                                  &bound_analyzer)(std::move(fptr->body));
+    return func;
+  } else {
+    return func;
+  }
 }
 
 namespace transform {

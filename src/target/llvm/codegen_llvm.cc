@@ -524,6 +524,22 @@ void CodeGenLLVM::GetAlignment(DataType t, const VarNode* buf_var, const PrimExp
   *p_alignment = align_bits / 8;
 }
 
+llvm::GlobalVariable* CodeGenLLVM::AllocateSharedMemory(DataType dtype, size_t size,
+                                                        unsigned int shared_address_space,
+                                                        int alignment,
+                                                        llvm::GlobalValue::LinkageTypes linkage) {
+  llvm::Type* type = llvm::ArrayType::get(DTypeToLLVMType(dtype), size);
+  llvm::GlobalVariable* global =
+      new llvm::GlobalVariable(*module_, type, false, linkage, nullptr, "shmem", nullptr,
+                               llvm::GlobalValue::NotThreadLocal, shared_address_space);
+#if TVM_LLVM_VERSION >= 100
+  global->setAlignment(llvm::Align(alignment));
+#else
+  global->setAlignment(alignment);
+#endif
+  return global;
+}
+
 std::unique_ptr<CodeGenLLVM::DebugInfo> CodeGenLLVM::CreateDebugInfo(llvm::Module* module) {
 #if TVM_LLVM_VERSION >= 100
   auto debug_info = std::make_unique<CodeGenLLVM::DebugInfo>();
@@ -845,7 +861,11 @@ llvm::Value* CodeGenLLVM::CreateIntrinsic(const CallNode* op) {
                                                                 : llvm::Type::getVoidTy(*ctx_);
     llvm::Function* f = GetIntrinsicDecl(id, return_type, arg_type);
     ICHECK(f) << "Cannot find intrinsic declaration, possible type mismatch: "
+#if TVM_LLVM_VERSION <= 130
               << llvm::Intrinsic::getName(id, {});
+#else
+              << llvm::Intrinsic::getName(id, return_type, {});
+#endif
     return builder_->CreateCall(f, arg_value);
   } else if (op->op.same_as(builtin::bitwise_and())) {
     return builder_->CreateAnd(MakeValue(op->args[0]), MakeValue(op->args[1]));
