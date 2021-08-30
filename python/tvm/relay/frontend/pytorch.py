@@ -2787,12 +2787,7 @@ class PyTorchOpConverter:
             "aten::nll_loss": self.nll_loss,
             "aten::nll_loss2d": self.nll_loss,
             "aten::flip": self.flip,
-<<<<<<< HEAD
-            "aten::grid_sampler": self.grid_sampler,
-            "aten::im2col": self.im2col,
-=======
             "aten::lstm": self.lstm,
->>>>>>> 3ebd353a7f526cdf21293055a00eeeabe6efae1f
         }
 
     def update_convert_map(self, custom_map):
